@@ -106,35 +106,47 @@ try {
             $credits = intval($data['credits']);
 
             $query = "INSERT INTO courses (course_code, course_name, credits) VALUES ('$course_code', '$course_name', $credits)";
-            $conn->query($query);
             
-            http_response_code(201);
-            echo json_encode(["success" => true, "message" => "Course added successfully."]);
+            if ($conn->query($query)) {
+                http_response_code(201);
+                echo json_encode(["success" => true, "message" => "Course added successfully."]);
+            } else {
+                http_response_code(500);
+                echo json_encode(["success" => false, "message" => "Failed to add course. The course code might already exist."]);
+            }
             break;
 
         case 'PUT':
+            // 1. We still need the OLD code from the URL to find the record
             if (!isset($_GET['code'])) {
                 http_response_code(400);
                 echo json_encode(["success" => false, "message" => "Missing course code parameter."]);
                 break;
             }
             
-            $code = $conn->real_escape_string($_GET['code']);
+            $old_code = $conn->real_escape_string($_GET['code']);
             $data = json_decode(file_get_contents("php://input"), true);
             
-            if (empty($data['course_name']) || !isset($data['credits'])) {
+            // 2. Now we also require the NEW course code in the JSON data payload
+            if (empty($data['course_code']) || empty($data['course_name']) || !isset($data['credits'])) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Course name and credits are required for modification."]);
+                echo json_encode(["success" => false, "message" => "Course code, course name, and credits are required for modification."]);
                 break;
             }
 
+            $new_code = $conn->real_escape_string($data['course_code']);
             $course_name = $conn->real_escape_string($data['course_name']);
             $credits = intval($data['credits']);
 
-            $query = "UPDATE courses SET course_name='$course_name', credits=$credits WHERE course_code='$code'";
-            $conn->query($query);
+            // 3. Update the course_code field alongside the others
+            $query = "UPDATE courses SET course_code='$new_code', course_name='$course_name', credits=$credits WHERE course_code='$old_code'";
             
-            echo json_encode(["success" => true, "message" => "Course details updated successfully."]);
+            if ($conn->query($query)) {
+                echo json_encode(["success" => true, "message" => "Course details updated successfully."]);
+            } else {
+                http_response_code(500);
+                echo json_encode(["success" => false, "message" => "Failed to update. The new course code might already be taken by another course."]);
+            }
             break;
 
         case 'DELETE':

@@ -8,7 +8,6 @@ checkApiKey();
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Wrap execution flow within a try-catch block to gracefully capture exceptions
 try {
     switch($method) {
         case 'GET':
@@ -21,7 +20,7 @@ try {
                     echo json_encode(["success" => true, "data" => $result->fetch_assoc()]);
                 } else {
                     http_response_code(404);
-                    echo json_encode(["success" => false, "message" => "Result record target not found."]);
+                    echo json_encode(["success" => false, "message" => "Result not found."]);
                 }
             } else {
                 $query = "SELECT * FROM results";
@@ -37,88 +36,84 @@ try {
         case 'POST':
             $data = json_decode(file_get_contents("php://input"), true);
             
-            if (!isset($data['student_id']) || !isset($data['exam_id']) || !isset($data['marks']) || empty($data['grade'])) {
+            if (!isset($data['student_id']) || !isset($data['exam_id']) || !isset($data['marks'])) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "All parameters are mandatory."]);
+                echo json_encode(["success" => false, "message" => "Missing parameters."]);
                 break;
             }
 
             $student_id = intval($data['student_id']);
             $exam_id = intval($data['exam_id']);
             $marks = intval($data['marks']);
-            $grade = $conn->real_escape_string($data['grade']);
 
-            // Data Range Validation (Replicates your SQL CHECK Constraint)
             if ($marks < 0 || $marks > 100) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Validation Error: Marks score must fall strictly within 0 and 100."]);
+                echo json_encode(["success" => false, "message" => "Marks must be between 0 and 100."]);
                 break;
             }
+
+            // Server-side calculation
+            $grade = 'F';
+            if ($marks >= 80) $grade = 'A';
+            elseif ($marks >= 70) $grade = 'B';
+            elseif ($marks >= 60) $grade = 'C';
+            elseif ($marks >= 50) $grade = 'D';
 
             $query = "INSERT INTO results (student_id, exam_id, marks, grade) VALUES ($student_id, $exam_id, $marks, '$grade')";
             $conn->query($query);
             
             http_response_code(201);
-            echo json_encode(["success" => true, "message" => "Student academic mark logged successfully.", "result_id" => $conn->insert_id]);
+            echo json_encode(["success" => true, "message" => "Added! Calculated Grade: $grade", "result_id" => $conn->insert_id]);
             break;
 
         case 'PUT':
             if (!isset($_GET['id'])) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Missing result instance reference ID."]);
+                echo json_encode(["success" => false, "message" => "Missing ID."]);
                 break;
             }
             
             $id = intval($_GET['id']);
             $data = json_decode(file_get_contents("php://input"), true);
             
-            if (!isset($data['marks']) || empty($data['grade'])) {
+            if (!isset($data['marks'])) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Both modified marks score and grades string tracking are required."]);
+                echo json_encode(["success" => false, "message" => "Marks score is required."]);
                 break;
             }
 
             $marks = intval($data['marks']);
-            $grade = $conn->real_escape_string($data['grade']);
 
-            // Data Range Validation
             if ($marks < 0 || $marks > 100) {
                 http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Validation Error: Marks out of range."]);
+                echo json_encode(["success" => false, "message" => "Marks out of range."]);
                 break;
             }
 
+            // Force recalculate the grade on the server
+            $grade = 'F';
+            if ($marks >= 80) $grade = 'A';
+            elseif ($marks >= 70) $grade = 'B';
+            elseif ($marks >= 60) $grade = 'C';
+            elseif ($marks >= 50) $grade = 'D';
+
+            // Explicitly update both marks and grade
             $query = "UPDATE results SET marks=$marks, grade='$grade' WHERE result_id=$id";
             $conn->query($query);
             
-            echo json_encode(["success" => true, "message" => "Result evaluation modified successfully."]);
+            // Sending the calculated grade back in the message so you can see it working!
+            echo json_encode(["success" => true, "message" => "Updated successfully! Calculated Grade: $grade"]);
             break;
 
         case 'DELETE':
-            if (!isset($_GET['id'])) {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Missing unique entry reference key."]);
-                break;
-            }
-
             $id = intval($_GET['id']);
-            $query = "DELETE FROM results WHERE result_id = $id";
-            $conn->query($query);
-            
-            echo json_encode(["success" => true, "message" => "Academic assessment instance deleted successfully."]);
-            break;
-
-        default:
-            http_response_code(405);
-            echo json_encode(["success" => false, "message" => "Method Not Allowed."]);
+            $conn->query("DELETE FROM results WHERE result_id = $id");
+            echo json_encode(["success" => true, "message" => "Deleted successfully."]);
             break;
     }
 } catch (Exception $e) {
-    // Route exception straight to global handler inside db.php
     jaringException($e);
 } finally {
-    if (isset($conn)) {
-        $conn->close();
-    }
+    if (isset($conn)) $conn->close();
 }
 ?>
