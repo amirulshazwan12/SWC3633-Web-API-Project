@@ -1,19 +1,19 @@
 <?php
-// exams.php - Handles CRUD for Examinations Entity
+// examinations.php - Handles CRUD for Examinations Entity
 header("Content-Type: application/json");
 include 'db.php'; 
 
+// Enforce security middleware layer check
 checkApiKey();
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Bungkus keseluruhan operasi di dalam blok TRY untuk menangkap ralat
+// Wrap execution flow within a try-catch block to gracefully capture exceptions
 try {
     switch($method) {
         case 'GET':
             if (isset($_GET['id'])) {
                 $id = intval($_GET['id']);
-                // Pembetulan ejaan nama table: examinations (dengan huruf 's')
                 $query = "SELECT * FROM examinations WHERE exam_id = $id";
                 $result = $conn->query($query);
                 
@@ -97,11 +97,11 @@ try {
             
         default:
             http_response_code(405);
-            echo json_encode(["success" => false, "message" => "Method tidak dibenarkan."]);
+            echo json_encode(["success" => false, "message" => "Method Not Allowed."]);
             break;
     }
 } catch (Exception $e) {
-    // Menghantar objek ralat terus ke fungsi pembersih ralat global di db.php
+    // Route exception straight to global handler inside db.php
     jaringException($e);
 } finally {
     if (isset($conn)) {
