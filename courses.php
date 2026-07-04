@@ -19,13 +19,76 @@ switch($method) {
                 echo json_encode(["success" => false, "message" => "Course not found."]);
             }
         } else {
-            $query = "SELECT * FROM courses";
+            // ==================== MULA LOGIK FILTERING & PAGINATION ====================
+            
+            // 1. Sediakan Array untuk menampung syarat-syarat WHERE
+            $where_clauses = [];
+
+            // Ciri Tapis 1: Tapis mengikut bilangan 'credits' (Contoh: courses.php?credits=3)
+            if (isset($_GET['credits']) && $_GET['credits'] !== '') {
+                $credits_filter = intval($_GET['credits']);
+                $where_clauses[] = "credits = $credits_filter";
+            }
+
+            // Ciri Tapis 2: Tapis mengikut nama kursus / Search (Contoh: courses.php?search=programming)
+            if (isset($_GET['search']) && $_GET['search'] !== '') {
+                $search_filter = $conn->real_escape_string($_GET['search']);
+                $where_clauses[] = "course_name LIKE '%$search_filter%'";
+            }
+
+            // Bina klausa WHERE secara dinamik jika ada tapisan yang dipilih
+            $where_sql = "";
+            if (count($where_clauses) > 0) {
+                $where_sql = " WHERE " . implode(" AND ", $where_clauses);
+            }
+
+
+            // 2. Ambil nilai 'page' dan 'limit' untuk Pagination
+            $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+            $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
+
+            if ($page < 1) { $page = 1; }
+            if ($limit < 1) { $limit = 10; }
+
+            $offset = ($page - 1) * $limit;
+
+
+            // 3. Dapatkan jumlah keseluruhan rekod yang LEPAS TAPISAN (Gunakan $where_sql)
+            $total_query = "SELECT COUNT(*) as total FROM courses" . $where_sql;
+            $total_result = $conn->query($total_query);
+            $total_row = $total_result->fetch_assoc();
+            $total_rows = intval($total_row['total']);
+
+            $total_pages = ceil($total_rows / $limit);
+
+
+            // 4. Query data courses dengan gabungan WHERE, LIMIT dan OFFSET
+            $query = "SELECT * FROM courses" . $where_sql . " LIMIT $limit OFFSET $offset";
             $result = $conn->query($query);
+            
             $courses = [];
             while($row = $result->fetch_assoc()) {
                 $courses[] = $row;
             }
-            echo json_encode(["success" => true, "data" => $courses]);
+
+
+            // 5. Hantar respon beserta Metadata
+            echo json_encode([
+                "success" => true,
+                "meta" => [
+                    "current_page" => $page,
+                    "per_page" => $limit,
+                    "total_rows" => $total_rows,
+                    "total_pages" => $total_pages,
+                    "filters_applied" => [
+                        "credits" => isset($_GET['credits']) ? $_GET['credits'] : null,
+                        "search" => isset($_GET['search']) ? $_GET['search'] : null
+                    ]
+                ],
+                "data" => $courses
+            ]);
+            
+            // ==================== TAMAT LOGIK FILTERING & PAGINATION ====================
         }
         break;
 
