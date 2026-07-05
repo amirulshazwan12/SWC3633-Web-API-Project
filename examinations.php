@@ -24,8 +24,22 @@ try {
                     echo json_encode(["success" => false, "message" => "Examination schedule record not found."]);
                 }
             } else {
-                $query = "SELECT * FROM examinations";
+                $where_clauses = [];
+
+                // Search by course code or venue
+                if (isset($_GET['search']) && $_GET['search'] !== '') {
+                    $search_filter = $conn->real_escape_string($_GET['search']);
+                    $where_clauses[] = "(course_code LIKE '%$search_filter%' OR venue LIKE '%$search_filter%')";
+                }
+
+                $where_sql = "";
+                if (count($where_clauses) > 0) {
+                    $where_sql = " WHERE " . implode(" AND ", $where_clauses);
+                }
+
+                $query = "SELECT * FROM examinations" . $where_sql;
                 $result = $conn->query($query);
+                
                 $exams = [];
                 while($row = $result->fetch_assoc()) {
                     $exams[] = $row;
@@ -101,7 +115,6 @@ try {
             break;
     }
 } catch (Exception $e) {
-    // Route exception straight to global handler inside db.php
     jaringException($e);
 } finally {
     if (isset($conn)) {

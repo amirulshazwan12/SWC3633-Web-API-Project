@@ -24,48 +24,28 @@ try {
                     echo json_encode(["success" => false, "message" => "Course not found."]);
                 }
             } else {
-                // ==================== ADVANCED FEATURES: FILTERING, SEARCH & PAGINATION ====================
+                // ==================== ADVANCED FEATURES: FILTERING & SEARCH ====================
                 
-                // 1. Prepare array to store dynamic WHERE clauses
                 $where_clauses = [];
 
-                // Feature: Filter by credits count (e.g., courses.php?credits=3)
+                // Filter by credits count
                 if (isset($_GET['credits']) && $_GET['credits'] !== '') {
                     $credits_filter = intval($_GET['credits']);
                     $where_clauses[] = "credits = $credits_filter";
                 }
 
-                // Feature: Filter by partial name search (e.g., courses.php?search=programming)
+                // Search by course name or course code
                 if (isset($_GET['search']) && $_GET['search'] !== '') {
                     $search_filter = $conn->real_escape_string($_GET['search']);
-                    $where_clauses[] = "course_name LIKE '%$search_filter%'";
+                    $where_clauses[] = "(course_name LIKE '%$search_filter%' OR course_code LIKE '%$search_filter%')";
                 }
 
-                // Construct WHERE sql dynamically if arrays are populated
                 $where_sql = "";
                 if (count($where_clauses) > 0) {
                     $where_sql = " WHERE " . implode(" AND ", $where_clauses);
                 }
 
-                // 2. Extract values for Pagination tracking
-                $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
-                $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
-
-                if ($page < 1) { $page = 1; }
-                if ($limit < 1) { $limit = 10; }
-
-                $offset = ($page - 1) * $limit;
-
-                // 3. Count total records matching the current filters
-                $total_query = "SELECT COUNT(*) as total FROM courses" . $where_sql;
-                $total_result = $conn->query($total_query);
-                $total_row = $total_result->fetch_assoc();
-                $total_rows = intval($total_row['total']);
-
-                $total_pages = ceil($total_rows / $limit);
-
-                // 4. Query tailored dataset using WHERE constraints, LIMIT, and OFFSET
-                $query = "SELECT * FROM courses" . $where_sql . " LIMIT $limit OFFSET $offset";
+                $query = "SELECT * FROM courses" . $where_sql;
                 $result = $conn->query($query);
                 
                 $courses = [];
@@ -73,22 +53,10 @@ try {
                     $courses[] = $row;
                 }
 
-                // 5. Send unified payload with descriptive pagination metadata
                 echo json_encode([
                     "success" => true,
-                    "meta" => [
-                        "current_page" => $page,
-                        "per_page" => $limit,
-                        "total_rows" => $total_rows,
-                        "total_pages" => $total_pages,
-                        "filters_applied" => [
-                            "credits" => isset($_GET['credits']) ? $_GET['credits'] : null,
-                            "search" => isset($_GET['search']) ? $_GET['search'] : null
-                        ]
-                    ],
                     "data" => $courses
                 ]);
-                // ==================== END OF ADVANCED API MANAGEMENT LOGIC ====================
             }
             break;
 
@@ -117,7 +85,6 @@ try {
             break;
 
         case 'PUT':
-            // 1. We still need the OLD code from the URL to find the record
             if (!isset($_GET['code'])) {
                 http_response_code(400);
                 echo json_encode(["success" => false, "message" => "Missing course code parameter."]);
@@ -127,7 +94,6 @@ try {
             $old_code = $conn->real_escape_string($_GET['code']);
             $data = json_decode(file_get_contents("php://input"), true);
             
-            // 2. Now we also require the NEW course code in the JSON data payload
             if (empty($data['course_code']) || empty($data['course_name']) || !isset($data['credits'])) {
                 http_response_code(400);
                 echo json_encode(["success" => false, "message" => "Course code, course name, and credits are required for modification."]);
@@ -138,7 +104,6 @@ try {
             $course_name = $conn->real_escape_string($data['course_name']);
             $credits = intval($data['credits']);
 
-            // 3. Update the course_code field alongside the others
             $query = "UPDATE courses SET course_code='$new_code', course_name='$course_name', credits=$credits WHERE course_code='$old_code'";
             
             if ($conn->query($query)) {
@@ -169,7 +134,6 @@ try {
             break;
     }
 } catch (Exception $e) {
-    // Route exception straight to global handler inside db.php
     jaringException($e);
 } finally {
     if (isset($conn)) {

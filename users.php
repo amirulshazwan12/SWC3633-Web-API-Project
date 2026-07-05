@@ -12,19 +12,25 @@ $method = $_SERVER['REQUEST_METHOD'];
 try {
     switch($method) {
         // =========================================================================
-        // READ (GET) - Enhanced with Advanced Features: Filtering & Sorting
+        // READ (GET) - Enhanced with Advanced Features: Filtering, Searching & Sorting
         // =========================================================================
         case 'GET':
             // Base structure query
             $query = "SELECT user_id, username, email, role FROM users WHERE 1=1";
             
-            // [ADVANCED FEATURE: FILTERING] Filter entries by role (e.g., ?role=Student)
-            if (isset($_GET['role'])) {
+            // Filter entries by role
+            if (isset($_GET['role']) && $_GET['role'] !== '') {
                 $role_filter = $conn->real_escape_string($_GET['role']);
                 $query .= " AND role = '$role_filter'";
             }
 
-            // [ADVANCED FEATURE: SORTING] Order records alphabetically (e.g., ?sort=desc)
+            // Search by username or email
+            if (isset($_GET['search']) && $_GET['search'] !== '') {
+                $search_filter = $conn->real_escape_string($_GET['search']);
+                $query .= " AND (username LIKE '%$search_filter%' OR email LIKE '%$search_filter%')";
+            }
+
+            // Order records alphabetically
             if (isset($_GET['sort']) && strtolower($_GET['sort']) == 'desc') {
                 $query .= " ORDER BY username DESC";
             } else {
@@ -34,6 +40,7 @@ try {
             // Execution structure
             if (isset($_GET['id'])) {
                 $id = intval($_GET['id']);
+                // Override query for specific ID
                 $query = "SELECT user_id, username, email, role FROM users WHERE user_id = $id";
                 $result = $conn->query($query);
                 if ($result->num_rows > 0) {
@@ -58,7 +65,7 @@ try {
         case 'POST':
             $data = json_decode(file_get_contents("php://input"), true);
             
-            // Data Validation Check (Checks if fields are missing)
+            // Data Validation Check
             if (empty($data['username']) || empty($data['password']) || empty($data['email']) || empty($data['role'])) {
                 http_response_code(400);
                 echo json_encode(["success" => false, "message" => "Validation Error: Missing required fields."]);
