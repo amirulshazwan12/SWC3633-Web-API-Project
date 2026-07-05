@@ -1,145 +1,121 @@
-<?php
-// users.php - Handles CRUD for Users Entity
-header("Content-Type: application/json");
-include 'db.php'; // Includes your XAMPP MySQL connection string
+	<?php
+	header("Content-Type: application/json");
+	include 'db.php'; 
+	checkApiKey();
 
-// Enforce security middleware layer check
-checkApiKey();
+	$method = $_SERVER['REQUEST_METHOD'];
 
-$method = $_SERVER['REQUEST_METHOD'];
+	try {
+		switch($method) {
+			case 'GET':
+				$query = "SELECT user_id, username, email, role FROM users WHERE 1=1";
+				
+				if (isset($_GET['role']) && $_GET['role'] !== '') {
+					$role_filter = $conn->real_escape_string($_GET['role']);
+					$query .= " AND role = '$role_filter'";
+				}
 
-// Wrap execution flow within a try-catch block to gracefully capture exceptions
-try {
-    switch($method) {
-        // =========================================================================
-        // READ (GET) - Enhanced with Advanced Features: Filtering, Searching & Sorting
-        // =========================================================================
-        case 'GET':
-            // Base structure query
-            $query = "SELECT user_id, username, email, role FROM users WHERE 1=1";
-            
-            // Filter entries by role
-            if (isset($_GET['role']) && $_GET['role'] !== '') {
-                $role_filter = $conn->real_escape_string($_GET['role']);
-                $query .= " AND role = '$role_filter'";
-            }
+				if (isset($_GET['search']) && $_GET['search'] !== '') {
+					$search_filter = $conn->real_escape_string($_GET['search']);
+					$query .= " AND (username LIKE '%$search_filter%' OR email LIKE '%$search_filter%')";
+				}
 
-            // Search by username or email
-            if (isset($_GET['search']) && $_GET['search'] !== '') {
-                $search_filter = $conn->real_escape_string($_GET['search']);
-                $query .= " AND (username LIKE '%$search_filter%' OR email LIKE '%$search_filter%')";
-            }
+				if (isset($_GET['sort']) && strtolower($_GET['sort']) == 'desc') {
+					$query .= " ORDER BY username DESC";
+				} else {
+					$query .= " ORDER BY username ASC"; // Default layout sorting
+				}
 
-            // Order records alphabetically
-            if (isset($_GET['sort']) && strtolower($_GET['sort']) == 'desc') {
-                $query .= " ORDER BY username DESC";
-            } else {
-                $query .= " ORDER BY username ASC"; // Default layout sorting
-            }
+				if (isset($_GET['id'])) {
+					$id = intval($_GET['id']);
+					$query = "SELECT user_id, username, email, role FROM users WHERE user_id = $id";
+					$result = $conn->query($query);
+					if ($result->num_rows > 0) {
+						echo json_encode(["success" => true, "data" => $result->fetch_assoc()]);
+					} else {
+						http_response_code(404);
+						echo json_encode(["success" => false, "message" => "User record not found."]);
+					}
+				} else {
+					$result = $conn->query($query);
+					$users = [];
+					while($row = $result->fetch_assoc()) {
+						$users[] = $row;
+					}
+					echo json_encode(["success" => true, "data" => $users]);
+				}
+				break;
+				
+			case 'POST':
+				$data = json_decode(file_get_contents("php://input"), true);
+				
+				if (empty($data['username']) || empty($data['password']) || empty($data['email']) || empty($data['role'])) {
+					http_response_code(400);
+					echo json_encode(["success" => false, "message" => "Validation Error: Missing required fields."]);
+					break;
+				}
 
-            // Execution structure
-            if (isset($_GET['id'])) {
-                $id = intval($_GET['id']);
-                // Override query for specific ID
-                $query = "SELECT user_id, username, email, role FROM users WHERE user_id = $id";
-                $result = $conn->query($query);
-                if ($result->num_rows > 0) {
-                    echo json_encode(["success" => true, "data" => $result->fetch_assoc()]);
-                } else {
-                    http_response_code(404);
-                    echo json_encode(["success" => false, "message" => "User record not found."]);
-                }
-            } else {
-                $result = $conn->query($query);
-                $users = [];
-                while($row = $result->fetch_assoc()) {
-                    $users[] = $row;
-                }
-                echo json_encode(["success" => true, "data" => $users]);
-            }
-            break;
+				$username = $conn->real_escape_string($data['username']);
+				$password = $conn->real_escape_string($data['password']); 
+				$email = $conn->real_escape_string($data['email']);
+				$role = $conn->real_escape_string($data['role']);
 
-        // ==========================================
-        // 2. CREATE (POST) - Add a new user with validation
-        // ==========================================
-        case 'POST':
-            $data = json_decode(file_get_contents("php://input"), true);
-            
-            // Data Validation Check
-            if (empty($data['username']) || empty($data['password']) || empty($data['email']) || empty($data['role'])) {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Validation Error: Missing required fields."]);
-                break;
-            }
+				$query = "INSERT INTO users (username, password, email, role) VALUES ('$username', '$password', '$email', '$role')";
+				
+				$conn->query($query);
+				http_response_code(201);
+				echo json_encode(["success" => true, "message" => "User created successfully.", "user_id" => $conn->insert_id]);
+				break;
 
-            $username = $conn->real_escape_string($data['username']);
-            $password = $conn->real_escape_string($data['password']); 
-            $email = $conn->real_escape_string($data['email']);
-            $role = $conn->real_escape_string($data['role']);
+			case 'PUT':
+				if (!isset($_GET['id'])) {
+					http_response_code(400);
+					echo json_encode(["success" => false, "message" => "Missing user ID in parameters."]);
+					break;
+				}
+				
+				$id = intval($_GET['id']);
+				$data = json_decode(file_get_contents("php://input"), true);
+				
+				if (empty($data['username']) || empty($data['role'])) {
+					http_response_code(400);
+					echo json_encode(["success" => false, "message" => "Username and role fields are mandatory for updates."]);
+					break;
+				}
 
-            $query = "INSERT INTO users (username, password, email, role) VALUES ('$username', '$password', '$email', '$role')";
-            
-            $conn->query($query);
-            http_response_code(201);
-            echo json_encode(["success" => true, "message" => "User created successfully.", "user_id" => $conn->insert_id]);
-            break;
+				$username = $conn->real_escape_string($data['username']);
+				$role = $conn->real_escape_string($data['role']);
 
-        // ==========================================
-        // 3. UPDATE (PUT) - Edit details of an existing user
-        // ==========================================
-        case 'PUT':
-            if (!isset($_GET['id'])) {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Missing user ID in parameters."]);
-                break;
-            }
-            
-            $id = intval($_GET['id']);
-            $data = json_decode(file_get_contents("php://input"), true);
-            
-            if (empty($data['username']) || empty($data['role'])) {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Username and role fields are mandatory for updates."]);
-                break;
-            }
+				$query = "UPDATE users SET username='$username', role='$role' WHERE user_id=$id";
+				
+				$conn->query($query);
+				echo json_encode(["success" => true, "message" => "User updated successfully."]);
+				break;
 
-            $username = $conn->real_escape_string($data['username']);
-            $role = $conn->real_escape_string($data['role']);
+			case 'DELETE':
+				if (!isset($_GET['id'])) {
+					http_response_code(400);
+					echo json_encode(["success" => false, "message" => "Missing user ID in parameters."]);
+					break;
+				}
 
-            $query = "UPDATE users SET username='$username', role='$role' WHERE user_id=$id";
-            
-            $conn->query($query);
-            echo json_encode(["success" => true, "message" => "User updated successfully."]);
-            break;
+				$id = intval($_GET['id']);
+				$query = "DELETE FROM users WHERE user_id = $id";
 
-        // ==========================================
-        // 4. DELETE (DELETE) - Remove a user entirely
-        // ==========================================
-        case 'DELETE':
-            if (!isset($_GET['id'])) {
-                http_response_code(400);
-                echo json_encode(["success" => false, "message" => "Missing user ID in parameters."]);
-                break;
-            }
+				$conn->query($query);
+				echo json_encode(["success" => true, "message" => "User deleted successfully."]);
+				break;
 
-            $id = intval($_GET['id']);
-            $query = "DELETE FROM users WHERE user_id = $id";
-
-            $conn->query($query);
-            echo json_encode(["success" => true, "message" => "User deleted successfully."]);
-            break;
-
-        default:
-            http_response_code(405);
-            echo json_encode(["success" => false, "message" => "Method Not Allowed."]);
-            break;
-    }
-} catch (Exception $e) {
-    // Route exception straight to global handler inside db.php
-    jaringException($e);
-} finally {
-    if (isset($conn)) {
-        $conn->close();
-    }
-}
-?>
+			default:
+				http_response_code(405);
+				echo json_encode(["success" => false, "message" => "Method Not Allowed."]);
+				break;
+		}
+	} catch (Exception $e) {
+		jaringException($e);
+	} finally {
+		if (isset($conn)) {
+			$conn->close();
+		}
+	}
+	?>

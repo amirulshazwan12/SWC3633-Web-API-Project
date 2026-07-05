@@ -1,14 +1,10 @@
 <?php
-// courses.php - Handles CRUD for Courses Entity
 header("Content-Type: application/json");
 include 'db.php'; 
-
-// Enforce security middleware layer check
 checkApiKey();
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Wrap execution flow within a try-catch block to gracefully capture exceptions
 try {
     switch($method) {
         case 'GET':
@@ -24,17 +20,14 @@ try {
                     echo json_encode(["success" => false, "message" => "Course not found."]);
                 }
             } else {
-                // ==================== ADVANCED FEATURES: FILTERING & SEARCH ====================
                 
                 $where_clauses = [];
 
-                // Filter by credits count
                 if (isset($_GET['credits']) && $_GET['credits'] !== '') {
                     $credits_filter = intval($_GET['credits']);
                     $where_clauses[] = "credits = $credits_filter";
                 }
 
-                // Search by course name or course code
                 if (isset($_GET['search']) && $_GET['search'] !== '') {
                     $search_filter = $conn->real_escape_string($_GET['search']);
                     $where_clauses[] = "(course_name LIKE '%$search_filter%' OR course_code LIKE '%$search_filter%')";
